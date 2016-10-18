@@ -2,25 +2,30 @@
 #include <curses.h>
 #include <string.h>
 #include <ctype.h>
+#include "stack.h"
 #define CTRL_H 8
 #define CTRL_E 5
 #define CTRL_F 6
+#define CTRL_M 13
 #define CTRL_S 19
 #define CTRL_G 7
+#define ESC 27
+#define BackSpace 8
 //(vert, hori)
-/*void ctrl_commands(fp) {
+/*
+void ctrl_commands(fp) {
 	char ch;
 	ch = getch();
 	
-			
-}*/
+}
+*/
 void homepage(int, int);
 void any_screen() {
 	keypad(stdscr, 1);
 	clear();
 	int max_y, max_x;
 	getmaxyx(stdscr, max_y, max_x);
-	mvprintw(max_y - 1, max_x - 28, "width:%d\tHeight:%d",max_x,max_y);
+	mvprintw(max_y - 1, max_x - 25, "width:%d\tHeight:%d",max_x,max_y);
 	refresh();
 }
 int help() {
@@ -32,15 +37,47 @@ int help() {
 	//ctrl + r -> redo
 	return 0;
 }
+int save(char *fname, char *ftmp) {
+	char ch;
+	int max_y, max_x;
+	getmaxyx(stdscr, max_y, max_x);
+	any_screen();
+	if(!(strcmp (fname, ftmp))) {
+		mvprintw (max_y - 1, 0, "Enter new file name : ");
+		scanw ("%s", fname);
+	}
+	FILE *fp;
+	fp = fopen (fname, "w");
+	while(fscanf(fp, "%c", &ch) != -1) {
+		fputc(ch, fp);
+	}
+	return 1;
+}
+//void cut(char *str) {
+	
+/*int mark(int init_y, int init_x) {
+	char ch;
+	char tmp_str[1024];
+	int i = 0;
+	while(ch != CTRL_M) {
+		attron(A_REVERSE);
+		ch = 
+		
+		attroff(A_REVERSE);
+	}
+	
+}*/
 int editor(char *fname) {
 	initscr();
 	any_screen();
 	int max_y, max_x;
 	getmaxyx(stdscr, max_y, max_x);
 	int y, x;
+	stack s;
+	init(&s);
 	FILE *fp, *fptmp;
-	int check_same;
-	char ch = 0;
+	int check_same, sv = 0;
+	int ch = 1;
 	fp = fopen (fname, "a+");
 	if(fp == NULL) {
 		printw("File not found\n");
@@ -48,58 +85,73 @@ int editor(char *fname) {
 	check_same = strcmp (fname, "_tmp.txt");
 	if(check_same != 0) {
 		fptmp = fopen ("_tmp.txt", "a+");
-		while (!feof(fp)) {
-		fscanf (fp,"%c", &ch);
+		while(!feof(fp)) {
+		fscanf(fp,"%c", &ch);
 			fprintf(fptmp, "%c", ch);
 		}
-		fclose (fp);
+		fclose(fp);
 		fp = fptmp;
-		move (1, 1);
+		move(0, 0);
+		fseek(fp, 0, SEEK_SET);
 		while(fscanf (fp,"%c", &ch) != -1) {
 			printw("%c", ch);
 		}
 	}
-	getyx (stdscr, y, x);
-//	mvprintw(max_y - 1, 0 ,"Current position = ( %d, %d)", y, x);
-	move ( 0, 0);
-	while (ch != 27) {
-		getyx (stdscr, y, x);
-		mvprintw(max_y - 1, 0 ,"Current position = ( %d, %d)", y, x);
-		move ( 0, 0);
-		ch = getch();
+	else
+		move(0, 0);
+	getyx(stdscr, y, x);
+	move(y, x);
+	ch = 1;
+	while(1) {
+		move(y, x);
 		cbreak();
-		if(ch == KEY_ENTER)	{
-			printw("enter\n");
-			move (y + 1, 0);
-		}
-		if(isprint(ch) || ch == KEY_ENTER) {
-			echo();
-			if(ch == KEY_ENTER)	{
-				printw("enter\n");
-				move (y + 1, 0);
-			}
+		ch = getch();
+		if(ch == ESC)
+			break;
+		getyx(stdscr, y, x);
+		mvprintw(max_y - 1, 0 ,"Current position = ( %d, %d)", y, x);
+		move(y, x);
+		if(isprint(ch) && ch != '\n') {
+			printw("%c", ch);
+			move(y, x++);
 			fprintf(fp, "%c", ch);
 		}
-		else {
-	
-			if(ch == KEY_ENTER)
-				move (y + 1, 0);
+		if(ch == '\n')	{
+			push(&s, x);
+			move (y++, x = 0);
+			fprintf(fp, "%c", ch);
 		}
+		if(ch == KEY_BACKSPACE) {
+			if(x ==	0) {
+				move(--y, x = pop(&s));
+			}
+			else {
+				move(y, --x);			
+//				printw("\b");
+				delch();
+			}
+		}
+		
 	}
 	move(max_y - 1, 0);
-	if(ch == 27) {
-//		ctrl_commands();
+	if(ch == ESC) {
+//		func_commands();
 		ch = getch();
+		ch = getch();
+		mvprintw(max_y - 2, 0, "Char recieved is : %d in ascii", ch);
 		switch(ch) {
 			case CTRL_S:
 				mvprintw(max_y - 1, 0,"Save");
-//				save();
+				sv = save (fname, "_tmp.txt");
 				break;
 		}
 	}
+	clear();
+	
+	if(sv)
+		mvprintw(max_y - 1, 0, "File saved");
 	refresh();
 	endwin();
-	
 	fclose(fp);
 	
 //	remove("_tmp.txt");
@@ -115,8 +167,6 @@ int main (int argc, char *argv[]) {
 	int ch;
 	noecho();
 	ch = getch();
-	if(ch == KEY_LEFT)
-		printw("Left arrow is pressed\n");
 	switch(ch) {
 		case CTRL_H:
 			mvprintw(max_y - 1, 0,"Help");
@@ -154,8 +204,10 @@ void homepage(int max_y,int max_x) {
 	mvprintw(4, 5, "\tCTRL+F:\tFile menu\n");
 	mvprintw(5, 5, "\tCTRL+H:\tHelp\n");
 	mvprintw(6, 5, "\tCTRL+E:\tStart Coding...\n");
+	mvprintw(7, 5, "\tCTRL+C:\tExit\n");
 	mvprintw(max_y - 1, max_x - 28, "width:%d\tHeight:%d",max_x,max_y);
 	refresh();
+	return;
 }
 
 
